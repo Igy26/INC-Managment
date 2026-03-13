@@ -1,4 +1,4 @@
-package app.main;
+package app;
 
 import app.ui.IncFormApp;
 

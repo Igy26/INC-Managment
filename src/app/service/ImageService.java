@@ -111,7 +111,7 @@ public class ImageService {
     private boolean isImageFile(File file) {
         String name = file.getName().toLowerCase();
         return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
-                || name.endsWith(".gif") || name.endsWith(".bmp");
+                || name.endsWith(".bmp");
     }
 
     private boolean deleteRecursively(File f) {

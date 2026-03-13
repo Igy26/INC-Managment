@@ -1,7 +1,7 @@
 package app.ui;
 
-import app.service.ImageService;
 import app.util.Constants;
+import app.controller.ImageController;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -23,7 +23,7 @@ public class IncFormApp extends JFrame {
     String currentFolder = null;
     String currentImage = null;
 
-    ImageService service = new ImageService();
+    ImageController service = new ImageController();
 
     Color PRIMARY = new Color(52,152,219);
     Color DARK = new Color(44,62,80);
@@ -37,7 +37,7 @@ public class IncFormApp extends JFrame {
         setTitle("INC Form Image Manager");
         setSize(1200,700);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         getContentPane().setBackground(LIGHT);
 
         initUI();
@@ -394,10 +394,5 @@ public class IncFormApp extends JFrame {
         int result = JOptionPane.showConfirmDialog(this, panel, "Choose Folder", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if(result == JOptionPane.OK_OPTION) return list.getSelectedValue();
         return null;
-    }
-
-    // ------------------------ Main ------------------------
-    public static void main(String[] args){
-        SwingUtilities.invokeLater(() -> new IncFormApp().setVisible(true));
     }
 }
