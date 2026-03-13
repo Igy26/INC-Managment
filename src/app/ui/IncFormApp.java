@@ -61,8 +61,28 @@ public class IncFormApp extends JFrame {
         rightToolbar.setOpaque(false);
 
         // Search field
-        searchField = new JTextField(20);
+        searchField = new JTextField("Search..",20);
+        searchField.setForeground(Color.GRAY);
         searchField.setPreferredSize(new Dimension(200,28));
+
+        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
+
+            public void focusGained(java.awt.event.FocusEvent e) {
+                if(searchField.getText().equals("Search..")){
+                    searchField.setText("");
+                    searchField.setForeground(Color.BLACK);
+                }
+            }
+
+            public void focusLost(java.awt.event.FocusEvent e) {
+                if(searchField.getText().isEmpty()){
+                    searchField.setForeground(Color.GRAY);
+                    searchField.setText("Search..");
+                }
+            }
+
+        });
+
         searchField.addKeyListener(new java.awt.event.KeyAdapter() {
             public void keyReleased(java.awt.event.KeyEvent evt) {
                 if(showingFolders){
