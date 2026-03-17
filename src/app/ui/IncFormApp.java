@@ -1,6 +1,5 @@
 package app.ui;
 
-import app.util.Constants;
 import app.controller.ImageController;
 
 import javax.swing.*;
@@ -20,7 +19,7 @@ public class IncFormApp extends JFrame {
     JButton backButton;
 
     double scale = 1.0;
-    String currentFolder = null;
+    String currentFaculty = null; // current folder
     String currentImage = null;
 
     ImageController service = new ImageController();
@@ -30,7 +29,6 @@ public class IncFormApp extends JFrame {
     Color LIGHT = new Color(245,246,250);
 
     boolean showingFolders = true;
-
     JScrollPane imageScrollPane;
 
     public IncFormApp() {
@@ -47,7 +45,7 @@ public class IncFormApp extends JFrame {
     private void initUI() {
         setLayout(new BorderLayout());
 
-        // ------------------------ Top toolbar ------------------------
+        // ------------------------ Top Toolbar ------------------------
         backButton = new JButton("← Back");
         styleButton(backButton);
         backButton.setVisible(false);
@@ -60,69 +58,53 @@ public class IncFormApp extends JFrame {
         JPanel rightToolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10,0));
         rightToolbar.setOpaque(false);
 
-        // Search field
         searchField = new JTextField("Search..",20);
         searchField.setForeground(Color.GRAY);
         searchField.setPreferredSize(new Dimension(200,28));
 
         searchField.addFocusListener(new java.awt.event.FocusAdapter() {
-
             public void focusGained(java.awt.event.FocusEvent e) {
                 if(searchField.getText().equals("Search..")){
                     searchField.setText("");
                     searchField.setForeground(Color.BLACK);
                 }
             }
-
             public void focusLost(java.awt.event.FocusEvent e) {
                 if(searchField.getText().isEmpty()){
                     searchField.setForeground(Color.GRAY);
                     searchField.setText("Search..");
                 }
             }
-
         });
 
         searchField.addKeyListener(new java.awt.event.KeyAdapter() {
             public void keyReleased(java.awt.event.KeyEvent evt) {
-                if(showingFolders){
-                    filterFolders(searchField.getText());
+                String text = searchField.getText().trim();
+                if(text.isEmpty() || text.equals("Search..")){
+                    loadFolders(); // show folders again
                 } else {
-                    filterImages(searchField.getText());
+                    filterImagesByFileName(text);
                 }
             }
         });
 
-        // Create Folder
-        JButton createFolderButton = new JButton("Create Folder");
-        styleButton(createFolderButton);
-        createFolderButton.addActionListener(e -> {
-            String folderName = JOptionPane.showInputDialog("Enter new professor folder name:");
-            if(folderName != null && !folderName.trim().isEmpty()){
-                if(service.createFolder(folderName)){
-                    JOptionPane.showMessageDialog(this, "Folder created successfully!");
-                    loadFolders();
-                } else {
-                    JOptionPane.showMessageDialog(this, "Folder already exists!");
-                }
-            }
-        });
+        // ------------------------ Buttons ------------------------
+        JButton importFolderButton = new JButton("Import Folder(s)");
+        styleButton(importFolderButton);
+        importFolderButton.addActionListener(e -> importFolders());
 
-        // Import Image
-        JButton importButton = new JButton("Import Image");
-        styleButton(importButton);
-        importButton.addActionListener(e -> importImages());
+        JButton importImageButton = new JButton("Import Image");
+        styleButton(importImageButton);
+        importImageButton.addActionListener(e -> importImages());
 
-        // Delete Button (Red/Danger)
         JButton deleteButton = new JButton("Delete");
-        styleButton(deleteButton);              
-        deleteButton.setBackground(Color.RED); 
-        deleteButton.setForeground(Color.WHITE); 
+        styleButton(deleteButton);
+        deleteButton.setBackground(Color.RED);
+        deleteButton.setForeground(Color.WHITE);
         deleteButton.addActionListener(e -> deleteSelected());
 
-        // Add buttons to toolbar
-        rightToolbar.add(createFolderButton);
-        rightToolbar.add(importButton);
+        rightToolbar.add(importFolderButton);
+        rightToolbar.add(importImageButton);
         rightToolbar.add(deleteButton);
         rightToolbar.add(searchField);
 
@@ -141,18 +123,25 @@ public class IncFormApp extends JFrame {
         // ------------------------ Table ------------------------
         model = new DefaultTableModel(new Object[]{"Name"},0) {
             @Override
-            public boolean isCellEditable(int row, int column) {
-                return false; // Prevent editing
-            }
+            public boolean isCellEditable(int row, int column) { return false; }
         };
         table = new JTable(model);
         styleTable(table);
         JScrollPane tableScroll = new JScrollPane(table);
+        
+        table.getSelectionModel().addListSelectionListener(e -> {
+        if (!e.getValueIsAdjusting()) {
+            int row = table.getSelectedRow();
+            if (row >= 0 && showingFolders) {
+                String selectedFolder = table.getValueAt(row, 0).toString();
+                currentFaculty = selectedFolder;
+            }
+        }
+        });
 
         // ------------------------ Image Viewer ------------------------
         imageViewer = new JLabel();
         imageViewer.setHorizontalAlignment(JLabel.CENTER);
-
         imageScrollPane = new JScrollPane(imageViewer);
         imageScrollPane.getVerticalScrollBar().setUnitIncrement(20);
         imageScrollPane.getHorizontalScrollBar().setUnitIncrement(20);
@@ -170,7 +159,7 @@ public class IncFormApp extends JFrame {
             imageViewer.setIcon(null);
             currentImage = null;
             scale = 1.0;
-            breadcrumb.setText(showingFolders ? "Folders" : "Folders > "+currentFolder);
+            breadcrumb.setText(showingFolders ? "Folders" : "Folders > "+currentFaculty);
         });
         viewerTop.add(closeViewer);
 
@@ -193,22 +182,24 @@ public class IncFormApp extends JFrame {
         splitPane.setDividerLocation(350);
         add(splitPane, BorderLayout.CENTER);
 
-        // ------------------------ Listeners ------------------------
+        // ------------------------ Table double-click ------------------------
         table.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                if(evt.getClickCount() == 2){ // double click
+                if(evt.getClickCount() == 2){
                     int row = table.getSelectedRow();
                     if(row >= 0){
-                        String name = table.getValueAt(row,0).toString();
+                        String fullName = table.getValueAt(row,0).toString();
                         if(showingFolders){
-                            currentFolder = name;
-                            loadImagesInFolder(currentFolder);
+                            currentFaculty = fullName;
+                            loadImagesInFaculty(currentFaculty);
                             backButton.setVisible(true);
-                            breadcrumb.setText("Folders > " + currentFolder);
+                            breadcrumb.setText("Folders > " + currentFaculty);
                         } else {
-                            currentImage = currentFolder + "/" + name;
+                            String[] parts = fullName.split("/",2);
+                            currentFaculty = parts[0];
+                            currentImage = fullName; // folder/file
                             showImage(currentImage);
-                            breadcrumb.setText("Folders > " + currentFolder + " > " + name);
+                            breadcrumb.setText("Folders > " + currentFaculty + " > " + parts[1]);
                         }
                     }
                 }
@@ -236,183 +227,140 @@ public class IncFormApp extends JFrame {
         table.setSelectionForeground(Color.WHITE);
     }
 
-    // ------------------------ Folder methods ------------------------
+    // ------------------------ Folder / Image Methods ------------------------
     private void loadFolders(){
         model.setRowCount(0);
         showingFolders = true;
-        currentFolder = null;
+        currentFaculty = null;
         backButton.setVisible(false);
         breadcrumb.setText("Folders");
-
-        List<String> folders = service.getFolders();
+        List<String> folders = service.getFacultyFolders();
         for(String f : folders) model.addRow(new Object[]{f});
     }
 
-    private void filterFolders(String search){
-        model.setRowCount(0);
-        List<String> folders = service.getFolders();
-        for(String f : folders){
-            if(f.toLowerCase().contains(search.toLowerCase())) model.addRow(new Object[]{f});
-        }
-    }
-
-    // ------------------------ Images methods ------------------------
-    private void loadImagesInFolder(String folder){
+    private void loadImagesInFaculty(String faculty){
         model.setRowCount(0);
         showingFolders = false;
-        List<String> images = service.getImagesInFolder(folder);
-        for(String f : images) model.addRow(new Object[]{f});
+        currentFaculty = faculty;
+        List<String> images = service.getImagesInFaculty(faculty);
+        for(String f : images) model.addRow(new Object[]{faculty + "/" + f});
     }
 
-    private void filterImages(String search){
+    private void filterImagesByFileName(String search){
         model.setRowCount(0);
-        List<String> images = service.getImagesInFolder(currentFolder);
-        for(String f : images){
-            if(f.toLowerCase().contains(search.toLowerCase())) model.addRow(new Object[]{f});
+        showingFolders = false;
+        breadcrumb.setText("Search Results");
+
+        List<String> folders = service.getFacultyFolders();
+        for(String folder : folders){
+            List<String> images = service.getImagesInFaculty(folder);
+            for(String img : images){
+                if(img.toLowerCase().contains(search.toLowerCase())){
+                    model.addRow(new Object[]{folder + "/" + img});
+                }
+            }
         }
     }
 
     private void showImage(String filename){
         try{
-            ImageIcon icon = new ImageIcon(Constants.IMAGE_PATH + filename);
+            ImageIcon icon = new ImageIcon("inc_images/" + filename);
             Image img = icon.getImage();
             int width = (int)(img.getWidth(null) * scale);
             int height = (int)(img.getHeight(null) * scale);
             Image resized = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
             imageViewer.setIcon(new ImageIcon(resized));
-        }catch(Exception e){
-            e.printStackTrace();
-        }
+        }catch(Exception e){ e.printStackTrace(); }
     }
 
     private void refreshImage(){
         if(currentImage != null) showImage(currentImage);
     }
 
+    // ------------------------ Import Folders ------------------------
+    private void importFolders(){
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setMultiSelectionEnabled(true);
+        int result = chooser.showOpenDialog(this);
+        if(result != JFileChooser.APPROVE_OPTION) return;
+
+        File[] folders = chooser.getSelectedFiles();
+        for(File f : folders){
+            File[] images = f.listFiles(file -> file.isFile() &&
+                    (file.getName().toLowerCase().endsWith(".jpg") ||
+                     file.getName().toLowerCase().endsWith(".png") ||
+                     file.getName().toLowerCase().endsWith(".jpeg") ||
+                     file.getName().toLowerCase().endsWith(".gif") ||
+                     file.getName().toLowerCase().endsWith(".bmp")));
+            if(images != null && images.length > 0){
+                service.importImagesToFaculty(images, f.getName());
+            }
+        }
+        loadFolders();
+        JOptionPane.showMessageDialog(this,"Folder(s) imported successfully!");
+    }
+
     // ------------------------ Import Images ------------------------
     private void importImages(){
-        List<String> folders = service.getFolders();
-        if(folders.isEmpty()){
-            JOptionPane.showMessageDialog(this,"No folders available. Please create a folder first.");
+        if(currentFaculty == null){
+            JOptionPane.showMessageDialog(this,"Please select a faculty folder first!");
             return;
         }
-
-        String chosenFolder = showSearchableFolderDialog(folders.toArray(new String[0]));
-        if(chosenFolder == null) return;
-
         JFileChooser chooser = new JFileChooser();
         chooser.setMultiSelectionEnabled(true);
-        chooser.setAcceptAllFileFilterUsed(false);
-        chooser.addChoosableFileFilter(new javax.swing.filechooser.FileFilter() {
-            @Override
-            public boolean accept(File f) {
-                if(f.isDirectory()) return true;
-                String name = f.getName().toLowerCase();
-                return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") 
-                        || name.endsWith(".gif") || name.endsWith(".bmp");
-            }
-            @Override
-            public String getDescription() {
-                return "Image Files (*.jpg, *.jpeg, *.png, *.gif, *.bmp)";
-            }
-        });
-
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
         int result = chooser.showOpenDialog(this);
         if(result != JFileChooser.APPROVE_OPTION) return;
 
         File[] files = chooser.getSelectedFiles();
-        java.util.List<File> imageFiles = new java.util.ArrayList<>();
-        for(File f : files){
-            String name = f.getName().toLowerCase();
-            if(name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") 
-               || name.endsWith(".gif") || name.endsWith(".bmp")){
-                imageFiles.add(f);
-            }
-        }
-
-        if(imageFiles.isEmpty()){
-            JOptionPane.showMessageDialog(this, "No valid image files selected!");
-            return;
-        }
-
-        service.importImagesToFolder(imageFiles.toArray(new File[0]), chosenFolder);
-        loadFolders();
-
-        JOptionPane.showMessageDialog(
-                this,
-                imageFiles.size() + " image" + (imageFiles.size() > 1 ? "s" : "") + " added successfully to \"" + chosenFolder + "\"!",
-                "Import Successful",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+        service.importImagesToFaculty(files, currentFaculty);
+        loadImagesInFaculty(currentFaculty);
+        JOptionPane.showMessageDialog(this,"Images imported successfully!");
     }
 
     // ------------------------ Delete ------------------------
-    private void deleteSelected() {
+    private void deleteSelected(){
         int row = table.getSelectedRow();
-        if (row < 0) {
-            JOptionPane.showMessageDialog(this, "Please select an item to delete.");
+        if(row < 0){
+            JOptionPane.showMessageDialog(this,"Please select an item to delete!");
             return;
         }
-
-        String name = table.getValueAt(row, 0).toString();
-        int confirm = JOptionPane.showConfirmDialog(
-                this,
-                "Are you sure you want to delete \"" + name + "\"?",
-                "Confirm Delete",
-                JOptionPane.YES_NO_OPTION
-        );
-
-        if (confirm != JOptionPane.YES_OPTION) return;
+        String name = table.getValueAt(row,0).toString();
+        int confirm = JOptionPane.showConfirmDialog(this,"Are you sure to delete \""+name+"\"?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        if(confirm != JOptionPane.YES_OPTION) return;
 
         boolean success = false;
-        if (showingFolders) {
-            success = service.deleteFolder(name);
-            if (success) loadFolders();
+        if(showingFolders){
+            File folder = new File("inc_images/" + name);
+            success = deleteFolderRecursively(folder);
+            if(success) loadFolders();
         } else {
-            success = service.deleteImage(currentFolder, name);
-            if (success) loadImagesInFolder(currentFolder);
+            String[] parts = name.split("/",2);
+            String folder = parts[0];
+            String file = parts[1];
+            success = service.deleteImageFromFaculty(folder, file);
+            if(success) loadImagesInFaculty(folder);
         }
 
-        if (success) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    (showingFolders ? "Folder" : "Image") + " \"" + name + "\" deleted successfully!"
-            );
-        } else {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Failed to delete " + (showingFolders ? "folder" : "image") + " \"" + name + "\"!"
-            );
-        }
+        if(success) JOptionPane.showMessageDialog(this,"Deleted successfully!");
+        else JOptionPane.showMessageDialog(this,"Delete failed!");
     }
 
-    // ------------------------ Searchable Folder Dialog ------------------------
-    private String showSearchableFolderDialog(String[] options){
-        JTextField searchField = new JTextField(20);
-        JList<String> list = new JList<>(options);
-        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setVisibleRowCount(8);
-
-        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { filter(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { filter(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { filter(); }
-            private void filter(){
-                String text = searchField.getText().toLowerCase();
-                java.util.List<String> filtered = new java.util.ArrayList<>();
-                for(String s : options) if(s.toLowerCase().contains(text)) filtered.add(s);
-                list.setListData(filtered.toArray(new String[0]));
+    private boolean deleteFolderRecursively(File folder){
+        if(folder.isDirectory()){
+            File[] files = folder.listFiles();
+            if(files != null){
+                for(File f : files){
+                    deleteFolderRecursively(f);
+                }
             }
-        });
+        }
+        return folder.delete();
+    }
 
-        JScrollPane scrollPane = new JScrollPane(list);
-        JPanel panel = new JPanel(new BorderLayout(5,5));
-        panel.add(new JLabel("Select Folder:"), BorderLayout.NORTH);
-        panel.add(searchField, BorderLayout.CENTER);
-        panel.add(scrollPane, BorderLayout.SOUTH);
-
-        int result = JOptionPane.showConfirmDialog(this, panel, "Choose Folder", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if(result == JOptionPane.OK_OPTION) return list.getSelectedValue();
-        return null;
+    // ------------------------ Main ------------------------
+    public static void main(String[] args){
+        SwingUtilities.invokeLater(() -> new IncFormApp().setVisible(true));
     }
 }
