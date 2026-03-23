@@ -1,11 +1,13 @@
 package app.ui;
 
 import app.controller.ImageController;
+import app.util.Constants;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.*;
 import java.io.File;
 import java.util.List;
 
@@ -22,6 +24,7 @@ public class IncFormApp extends JFrame {
     String currentFaculty = null; // current folder
     String currentImage = null;
 
+    boolean isSearching = false; // track search state
     ImageController service = new ImageController();
 
     Color PRIMARY = new Color(52,152,219);
@@ -49,7 +52,12 @@ public class IncFormApp extends JFrame {
         backButton = new JButton("← Back");
         styleButton(backButton);
         backButton.setVisible(false);
-        backButton.addActionListener(e -> loadFolders());
+        backButton.addActionListener(e -> {
+            isSearching = false;
+            loadFolders();
+            searchField.setText("Search..");
+            searchField.setForeground(Color.GRAY);
+        });
 
         JPanel leftToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         leftToolbar.setOpaque(false);
@@ -62,14 +70,15 @@ public class IncFormApp extends JFrame {
         searchField.setForeground(Color.GRAY);
         searchField.setPreferredSize(new Dimension(200,28));
 
-        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
-            public void focusGained(java.awt.event.FocusEvent e) {
+        // ------------------ Search placeholder behavior ------------------
+        searchField.addFocusListener(new FocusAdapter() {
+            public void focusGained(FocusEvent e) {
                 if(searchField.getText().equals("Search..")){
                     searchField.setText("");
                     searchField.setForeground(Color.BLACK);
                 }
             }
-            public void focusLost(java.awt.event.FocusEvent e) {
+            public void focusLost(FocusEvent e) {
                 if(searchField.getText().isEmpty()){
                     searchField.setForeground(Color.GRAY);
                     searchField.setText("Search..");
@@ -77,13 +86,21 @@ public class IncFormApp extends JFrame {
             }
         });
 
-        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
-            public void keyReleased(java.awt.event.KeyEvent evt) {
+        searchField.addKeyListener(new KeyAdapter() {
+            public void keyReleased(KeyEvent evt) {
                 String text = searchField.getText().trim();
                 if(text.isEmpty() || text.equals("Search..")){
-                    loadFolders(); // show folders again
+                    isSearching = false;
+                    loadFolders();
                 } else {
+                    isSearching = true;
                     filterImagesByFileName(text);
+                }
+            }
+
+            public void keyPressed(KeyEvent evt) {
+                if(evt.getKeyCode() == KeyEvent.VK_ENTER){
+                    openSelectedItem();
                 }
             }
         });
@@ -126,17 +143,19 @@ public class IncFormApp extends JFrame {
             public boolean isCellEditable(int row, int column) { return false; }
         };
         table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         styleTable(table);
         JScrollPane tableScroll = new JScrollPane(table);
         
-        table.getSelectionModel().addListSelectionListener(e -> {
-        if (!e.getValueIsAdjusting()) {
-            int row = table.getSelectedRow();
-            if (row >= 0 && showingFolders) {
-                String selectedFolder = table.getValueAt(row, 0).toString();
-                currentFaculty = selectedFolder;
+        // Disable default Enter key behavior in JTable
+        table.getInputMap(JTable.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+             .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openItem");
+
+        table.getActionMap().put("openItem", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                openSelectedItem(); // Open folder or image
             }
-        }
         });
 
         // ------------------------ Image Viewer ------------------------
@@ -183,25 +202,19 @@ public class IncFormApp extends JFrame {
         add(splitPane, BorderLayout.CENTER);
 
         // ------------------------ Table double-click ------------------------
-        table.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
+        table.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent evt) {
                 if(evt.getClickCount() == 2){
-                    int row = table.getSelectedRow();
-                    if(row >= 0){
-                        String fullName = table.getValueAt(row,0).toString();
-                        if(showingFolders){
-                            currentFaculty = fullName;
-                            loadImagesInFaculty(currentFaculty);
-                            backButton.setVisible(true);
-                            breadcrumb.setText("Folders > " + currentFaculty);
-                        } else {
-                            String[] parts = fullName.split("/",2);
-                            currentFaculty = parts[0];
-                            currentImage = fullName; // folder/file
-                            showImage(currentImage);
-                            breadcrumb.setText("Folders > " + currentFaculty + " > " + parts[1]);
-                        }
-                    }
+                    openSelectedItem();
+                }
+            }
+        });
+
+        // ------------------------ ENTER key to open ------------------------
+        table.addKeyListener(new KeyAdapter() {
+            public void keyPressed(KeyEvent evt) {
+                if(evt.getKeyCode() == KeyEvent.VK_ENTER){
+                    openSelectedItem();
                 }
             }
         });
@@ -242,6 +255,7 @@ public class IncFormApp extends JFrame {
         model.setRowCount(0);
         showingFolders = false;
         currentFaculty = faculty;
+        backButton.setVisible(true);
         List<String> images = service.getImagesInFaculty(faculty);
         for(String f : images) model.addRow(new Object[]{faculty + "/" + f});
     }
@@ -260,11 +274,12 @@ public class IncFormApp extends JFrame {
                 }
             }
         }
+        backButton.setVisible(true);
     }
 
     private void showImage(String filename){
         try{
-            ImageIcon icon = new ImageIcon("inc_images/" + filename);
+            ImageIcon icon = new ImageIcon(Constants.IMAGE_PATH + File.separator + filename);
             Image img = icon.getImage();
             int width = (int)(img.getWidth(null) * scale);
             int height = (int)(img.getHeight(null) * scale);
@@ -321,30 +336,54 @@ public class IncFormApp extends JFrame {
 
     // ------------------------ Delete ------------------------
     private void deleteSelected(){
-        int row = table.getSelectedRow();
-        if(row < 0){
-            JOptionPane.showMessageDialog(this,"Please select an item to delete!");
+        int[] rows = table.getSelectedRows();
+        if(rows.length == 0){
+            JOptionPane.showMessageDialog(this,"Please select item(s) to delete!");
             return;
         }
-        String name = table.getValueAt(row,0).toString();
-        int confirm = JOptionPane.showConfirmDialog(this,"Are you sure to delete \""+name+"\"?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Are you sure you want to delete selected item(s)?",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION
+        );
+
         if(confirm != JOptionPane.YES_OPTION) return;
 
-        boolean success = false;
-        if(showingFolders){
-            File folder = new File("inc_images/" + name);
-            success = deleteFolderRecursively(folder);
-            if(success) loadFolders();
-        } else {
-            String[] parts = name.split("/",2);
-            String folder = parts[0];
-            String file = parts[1];
-            success = service.deleteImageFromFaculty(folder, file);
-            if(success) loadImagesInFaculty(folder);
+        boolean allSuccess = true;
+
+        for(int i = rows.length - 1; i >= 0; i--){
+            int row = rows[i];
+            String name = table.getValueAt(row,0).toString();
+            boolean success = false;
+
+            if(showingFolders){
+                File folder = new File(Constants.IMAGE_PATH + File.separator + name);
+                success = deleteFolderRecursively(folder);
+            } else {
+                String[] parts = name.split("/",2);
+                success = service.deleteImageFromFaculty(parts[0], parts[1]);
+            }
+
+            if(!success) allSuccess = false;
         }
 
-        if(success) JOptionPane.showMessageDialog(this,"Deleted successfully!");
-        else JOptionPane.showMessageDialog(this,"Delete failed!");
+        if(showingFolders){
+            loadFolders();
+        } else {
+            if(isSearching){
+                filterImagesByFileName(searchField.getText());
+            } else {
+                loadImagesInFaculty(currentFaculty);
+            }
+        }
+
+        if(allSuccess){
+            JOptionPane.showMessageDialog(this,"All selected items deleted successfully!");
+        } else {
+            JOptionPane.showMessageDialog(this,"Some items failed to delete.");
+        }
     }
 
     private boolean deleteFolderRecursively(File folder){
@@ -357,6 +396,26 @@ public class IncFormApp extends JFrame {
             }
         }
         return folder.delete();
+    }
+
+    // ------------------------ Helper Methods ------------------------
+    private void openSelectedItem(){
+        int row = table.getSelectedRow();
+        if(row >= 0){
+            String fullName = table.getValueAt(row,0).toString();
+            if(showingFolders){
+                currentFaculty = fullName;
+                loadImagesInFaculty(currentFaculty);
+                backButton.setVisible(true);
+                breadcrumb.setText("Folders > " + currentFaculty);
+            } else {
+                String[] parts = fullName.split("/",2);
+                currentFaculty = parts[0];
+                currentImage = fullName;
+                showImage(currentImage);
+                breadcrumb.setText("Folders > " + currentFaculty + " > " + parts[1]);
+            }
+        }
     }
 
     // ------------------------ Main ------------------------
